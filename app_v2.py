@@ -2195,6 +2195,54 @@ with tab2:
 
                     st.divider()
 
+                    # Convert PPTX to PNG using LibreOffice (works on Streamlit Cloud/Linux)
+                    png_bytes = None
+                    try:
+                        import subprocess, shutil
+                        tmp_pptx = os.path.join(tempfile.gettempdir(), "summary_export.pptx")
+                        tmp_out_dir = os.path.join(tempfile.gettempdir(), "summary_png_out")
+                        if os.path.exists(tmp_out_dir):
+                            shutil.rmtree(tmp_out_dir)
+                        os.makedirs(tmp_out_dir, exist_ok=True)
+                        with open(tmp_pptx, 'wb') as f:
+                            f.write(pptx_bytes)
+                        # Try LibreOffice (Linux/Cloud)
+                        result = subprocess.run(
+                            ['libreoffice', '--headless', '--convert-to', 'png', '--outdir', tmp_out_dir, tmp_pptx],
+                            capture_output=True, text=True, timeout=30
+                        )
+                        # Find the PNG file
+                        png_files = [f for f in os.listdir(tmp_out_dir) if f.endswith('.png')]
+                        if png_files:
+                            with open(os.path.join(tmp_out_dir, png_files[0]), 'rb') as f:
+                                png_bytes = f.read()
+                        # Cleanup
+                        os.unlink(tmp_pptx)
+                        shutil.rmtree(tmp_out_dir, ignore_errors=True)
+                    except Exception as e:
+                        # Fallback: try comtypes on Windows
+                        try:
+                            import comtypes.client
+                            tmp_pptx = os.path.join(tempfile.gettempdir(), "summary_export.pptx")
+                            tmp_png_dir = os.path.join(tempfile.gettempdir(), "summary_png_out2")
+                            with open(tmp_pptx, 'wb') as f:
+                                f.write(pptx_bytes)
+                            powerpoint = comtypes.client.CreateObject("Powerpoint.Application")
+                            powerpoint.Visible = 1
+                            deck = powerpoint.Presentations.Open(tmp_pptx)
+                            deck.Export(tmp_png_dir, "PNG", 960, 1280)
+                            deck.Close()
+                            powerpoint.Quit()
+                            png_file = os.path.join(tmp_png_dir, "Slide1.PNG")
+                            if os.path.exists(png_file):
+                                with open(png_file, 'rb') as f:
+                                    png_bytes = f.read()
+                            os.unlink(tmp_pptx)
+                            import shutil
+                            if os.path.exists(tmp_png_dir): shutil.rmtree(tmp_png_dir)
+                        except:
+                            pass
+
                     c1, c2 = st.columns(2)
                     with c1:
                         st.download_button("\U0001f4e5 Download PPTX", pptx_bytes,
@@ -2202,13 +2250,15 @@ with tab2:
                             mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                             use_container_width=True)
                     with c2:
-                        st.download_button("\U0001f4a1 Open PPTX → File → Export → PNG",
-                            data=pptx_bytes,
-                            file_name=f"LobbyOps_Summary_{t3_week.replace(' ','_')}.pptx",
-                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                            use_container_width=True)
+                        if png_bytes:
+                            st.download_button("\U0001f5bc\ufe0f Download PNG", png_bytes,
+                                file_name=f"LobbyOps_Summary_{t3_week.replace(' ','_')}.png",
+                                mime="image/png", use_container_width=True)
+                        else:
+                            st.info("PNG export not available on this server. Download PPTX and export from PowerPoint.")
 
-                    st.info("💡 **To get PNG:** Download the PPTX → Open in PowerPoint → File → Export → Change File Type → PNG")
+                    if png_bytes:
+                        st.image(png_bytes, caption="Preview", use_container_width=True)
 
                 except Exception as e:
                     st.error(f"Error: {e}")
