@@ -1790,6 +1790,214 @@ def _parse_summary_pdf(path):
 
 
 
+def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label, total_games_override=None, total_opts_override=None, total_cont_override=None):
+    """Generate summary report as PNG using Pillow - works on any platform."""
+    from PIL import Image, ImageDraw, ImageFont
+    import io as _io
+
+    # Canvas settings
+    W = 960  # width in pixels
+    MARGIN = 40
+    CW = W - 2 * MARGIN  # content width
+
+    # Colors
+    PURPLE_C = (91, 33, 182)
+    DARK_C = (31, 31, 31)
+    GRAY_C = (75, 85, 99)
+    KPI_BG_C = (243, 244, 246)
+    ROW1_C = (237, 233, 254)
+    ROW2_C = (245, 243, 255)
+    TOTAL_BG_C = (232, 222, 248)
+    WHITE_C = (255, 255, 255)
+
+    CARD_COLORS = [
+        [(110,231,183),(253,230,138),(252,165,165),(253,186,116),(103,232,249)],
+        [(196,181,253),(249,168,212),(252,165,165),(253,186,116),(94,234,212)],
+        [(253,230,138),(110,231,183),(103,232,249),(196,181,253),(249,168,212)],
+    ]
+
+    # Try to load Mulish font, fallback to default
+    try:
+        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        font_sm = ImageFont.truetype(font_path, 14)
+        font_md = ImageFont.truetype(font_path, 18)
+        font_lg = ImageFont.truetype(font_path, 24)
+        font_xl = ImageFont.truetype(font_path, 36)
+        font_title = ImageFont.truetype(font_path, 22)
+        font_tiny = ImageFont.truetype(font_path, 12)
+    except:
+        font_sm = ImageFont.load_default()
+        font_md = font_sm
+        font_lg = font_sm
+        font_xl = font_sm
+        font_title = font_sm
+        font_tiny = font_sm
+
+    # Build data
+    _MG = [
+        [("UK", "UK"), ("Brazil", "Brazil"), ("Canada", "Canada ROC"), ("Ontario", "Ontario"), ("Greece", "Greece")],
+        [("Southern Europe", "Southern Europe"), ("Austria", "Austria"), ("Denmark", "Denmark"), ("Germany", "Germany"), ("ROW", "ROW")],
+        [("Belgium", "Belgium"), ("Italy", "Italy"), ("South Africa", "South Africa"), ("Black Rush", "Black Rush"), ("Foxy NZ", "Foxy NZ")],
+    ]
+
+    gg = [[(l, game_counts.get(k, 0)) for l, k in row] for row in _MG]
+    if "South Africa" not in opt_counts:
+        opt_counts["South Africa"] = 0
+    ol = [(m, c) for m, c in opt_counts.items() if c > 0]
+    ol.sort(key=lambda x: x[1], reverse=True)
+    zero_markets = [(m, c) for m, c in opt_counts.items() if c == 0]
+    ol = ol + zero_markets
+
+    tg = total_games_override if total_games_override else sum(c for row in gg for _, c in row if c > 0)
+    to = total_opts_override if total_opts_override else sum(c for _, c in ol)
+    tc = total_cont_override if total_cont_override else len(cont_list)
+
+    active_cards = []
+    for ri, row in enumerate(gg):
+        for ci, (lbl, cnt) in enumerate(row):
+            if cnt > 0 and lbl:
+                clr = CARD_COLORS[ri % 3][ci % 5]
+                active_cards.append((lbl, cnt, clr))
+
+    # Calculate total height needed
+    rows_needed = (len(active_cards) + 4) // 5
+    opt_rows = len(ol) + 1  # +1 for TOTAL
+    cont_rows = len(cont_list)
+    table_rows = max(opt_rows, cont_rows)
+    ku_lines = len(key_updates)
+
+    total_h = (60 +  # top bar + title
+               80 +  # KPI boxes
+               20 +  # section header
+               rows_needed * 70 +  # cards grid
+               30 +  # section header
+               table_rows * 22 + 40 +  # tables
+               30 +  # section header
+               ku_lines * 18 + 20 +  # key updates
+               40)  # footer
+    total_h = max(total_h, 800)
+
+    # Create image
+    img = Image.new('RGB', (W, total_h), WHITE_C)
+    draw = ImageDraw.Draw(img)
+    y = 0
+
+    # Top accent bar
+    draw.rectangle([0, 0, W, 6], fill=PURPLE_C)
+    y = 20
+
+    # Title
+    draw.text((MARGIN, y), "LOBBY-OPS  |  WEEKLY SUMMARY", fill=PURPLE_C, font=font_title)
+    y += 30
+    draw.text((MARGIN, y), f"{week_label}  |  P&T Global Gaming Content", fill=DARK_C, font=font_sm)
+    y += 30
+
+    # KPI Boxes
+    kpi_w = (CW - 20) // 3
+    kpis = [(tg, "GAMES RELEASED"), (to, "OPTIMIZATIONS"), (tc, "NEW CONTAINERS")]
+    for i, (val, lbl) in enumerate(kpis):
+        x = MARGIN + i * (kpi_w + 10)
+        draw.rounded_rectangle([x, y, x + kpi_w, y + 70], radius=8, fill=KPI_BG_C)
+        draw.text((x + kpi_w//2, y + 12), lbl, fill=DARK_C, font=font_tiny, anchor="mt")
+        draw.text((x + kpi_w//2, y + 32), str(val), fill=PURPLE_C, font=font_xl, anchor="mt")
+    y += 85
+
+    # Games Released section
+    draw.text((MARGIN, y), "GAMES RELEASED BY MARKET", fill=PURPLE_C, font=font_sm)
+    y += 18
+    draw.rectangle([MARGIN, y, MARGIN + 200, y + 3], fill=PURPLE_C)
+    y += 12
+
+    # Cards grid
+    card_w = (CW - 4 * 8) // 5
+    card_h = 55
+    for idx, (lbl, cnt, clr) in enumerate(active_cards):
+        ri = idx // 5
+        ci = idx % 5
+        cx = MARGIN + ci * (card_w + 8)
+        cy = y + ri * (card_h + 8)
+        draw.rounded_rectangle([cx, cy, cx + card_w, cy + card_h], radius=6, fill=clr)
+        draw.text((cx + card_w//2, cy + 10), str(cnt), fill=DARK_C, font=font_lg, anchor="mt")
+        draw.text((cx + card_w//2, cy + 38), lbl, fill=DARK_C, font=font_tiny, anchor="mt")
+    y += rows_needed * (card_h + 8) + 15
+
+    # Optimizations table (left) + Containers table (right)
+    left_w = (CW - 20) // 2
+    right_w = CW - left_w - 20
+
+    # Opt header
+    draw.text((MARGIN, y), "OPTIMIZATIONS BY MARKET", fill=PURPLE_C, font=font_sm)
+    draw.text((MARGIN + left_w + 20, y), "NEW CONTAINERS ENABLED", fill=PURPLE_C, font=font_sm)
+    y += 18
+    draw.rectangle([MARGIN, y, MARGIN + 180, y + 3], fill=PURPLE_C)
+    draw.rectangle([MARGIN + left_w + 20, y, MARGIN + left_w + 200, y + 3], fill=PURPLE_C)
+    y += 8
+
+    # Table headers
+    draw.text((MARGIN + 5, y), "Market", fill=DARK_C, font=font_sm)
+    draw.text((MARGIN + left_w - 40, y), "Count", fill=DARK_C, font=font_sm)
+    draw.text((MARGIN + left_w + 25, y), "Container", fill=DARK_C, font=font_sm)
+    draw.text((MARGIN + left_w + 20 + right_w - 60, y), "Brand", fill=DARK_C, font=font_sm)
+    y += 20
+
+    # Data rows
+    row_h = 20
+    od = ol + [("TOTAL", to)]
+    max_rows = max(len(od), len(cont_list))
+    for i in range(max_rows):
+        ry = y + i * row_h
+        # Opt row
+        if i < len(od):
+            mk, cn = od[i]
+            is_total = mk == "TOTAL"
+            bg = TOTAL_BG_C if is_total else (ROW1_C if i % 2 == 0 else ROW2_C)
+            draw.rectangle([MARGIN, ry, MARGIN + left_w, ry + row_h], fill=bg)
+            f = font_sm if not is_total else font_md
+            draw.text((MARGIN + 5, ry + 2), mk, fill=DARK_C, font=font_tiny)
+            draw.text((MARGIN + left_w - 40, ry + 2), str(cn), fill=DARK_C, font=font_tiny)
+
+        # Container row
+        if i < len(cont_list):
+            cn_name, cn_brand = cont_list[i]
+            bg = ROW1_C if i % 2 == 0 else ROW2_C
+            rx = MARGIN + left_w + 20
+            draw.rectangle([rx, ry, rx + right_w, ry + row_h], fill=bg)
+            # Truncate if needed
+            cn_disp = cn_name if len(cn_name) <= 30 else cn_name[:27] + "..."
+            cb_disp = cn_brand if len(cn_brand) <= 15 else cn_brand[:12] + "..."
+            draw.text((rx + 5, ry + 2), cn_disp, fill=DARK_C, font=font_tiny)
+            draw.text((rx + right_w - 80, ry + 2), cb_disp, fill=DARK_C, font=font_tiny)
+
+    y += max_rows * row_h + 15
+
+    # Key Updates
+    draw.text((MARGIN, y), "KEY UPDATES", fill=PURPLE_C, font=font_sm)
+    y += 18
+    draw.rectangle([MARGIN, y, MARGIN + 180, y + 3], fill=PURPLE_C)
+    y += 10
+    for u in key_updates:
+        txt_line = "• " + u
+        if len(txt_line) > 100:
+            txt_line = txt_line[:97] + "..."
+        draw.text((MARGIN + 5, y), txt_line, fill=DARK_C, font=font_tiny)
+        y += 16
+    y += 10
+
+    # Footer
+    draw.text((W // 2, y), "Entain  |  P&T Global Gaming Content  |  Lobby-Ops", fill=PURPLE_C, font=font_tiny, anchor="mt")
+    y += 20
+    draw.rectangle([0, y, W, y + 6], fill=PURPLE_C)
+
+    # Crop to actual content height
+    img = img.crop((0, 0, W, y + 6))
+
+    # Save to bytes
+    buf = _io.BytesIO()
+    img.save(buf, format='PNG', dpi=(150, 150))
+    buf.seek(0)
+    return buf.getvalue()
+
+
 def _gen_summary_pptx(game_counts, opt_counts, cont_list, key_updates, week_label, total_games_override=None, total_opts_override=None, total_cont_override=None):
     """Generate portrait PPTX summary - exact replica of build_week5_v3.py output."""
     from pptx.util import Pt, Emu
@@ -2192,56 +2400,9 @@ with tab2:
             with st.spinner("Generating..."):
                 try:
                     pptx_bytes = _gen_summary_pptx(gc, oc, clean_cr, final_ku, t3_week, total_g, total_o, len(clean_cr))
+                    png_bytes = _gen_summary_png(gc, oc, clean_cr, final_ku, t3_week, total_g, total_o, len(clean_cr))
 
                     st.divider()
-
-                    # Convert PPTX to PNG using LibreOffice (works on Streamlit Cloud/Linux)
-                    png_bytes = None
-                    try:
-                        import subprocess, shutil
-                        tmp_pptx = os.path.join(tempfile.gettempdir(), "summary_export.pptx")
-                        tmp_out_dir = os.path.join(tempfile.gettempdir(), "summary_png_out")
-                        if os.path.exists(tmp_out_dir):
-                            shutil.rmtree(tmp_out_dir)
-                        os.makedirs(tmp_out_dir, exist_ok=True)
-                        with open(tmp_pptx, 'wb') as f:
-                            f.write(pptx_bytes)
-                        # Try LibreOffice (Linux/Cloud)
-                        result = subprocess.run(
-                            ['libreoffice', '--headless', '--convert-to', 'png', '--outdir', tmp_out_dir, tmp_pptx],
-                            capture_output=True, text=True, timeout=30
-                        )
-                        # Find the PNG file
-                        png_files = [f for f in os.listdir(tmp_out_dir) if f.endswith('.png')]
-                        if png_files:
-                            with open(os.path.join(tmp_out_dir, png_files[0]), 'rb') as f:
-                                png_bytes = f.read()
-                        # Cleanup
-                        os.unlink(tmp_pptx)
-                        shutil.rmtree(tmp_out_dir, ignore_errors=True)
-                    except Exception as e:
-                        # Fallback: try comtypes on Windows
-                        try:
-                            import comtypes.client
-                            tmp_pptx = os.path.join(tempfile.gettempdir(), "summary_export.pptx")
-                            tmp_png_dir = os.path.join(tempfile.gettempdir(), "summary_png_out2")
-                            with open(tmp_pptx, 'wb') as f:
-                                f.write(pptx_bytes)
-                            powerpoint = comtypes.client.CreateObject("Powerpoint.Application")
-                            powerpoint.Visible = 1
-                            deck = powerpoint.Presentations.Open(tmp_pptx)
-                            deck.Export(tmp_png_dir, "PNG", 960, 1280)
-                            deck.Close()
-                            powerpoint.Quit()
-                            png_file = os.path.join(tmp_png_dir, "Slide1.PNG")
-                            if os.path.exists(png_file):
-                                with open(png_file, 'rb') as f:
-                                    png_bytes = f.read()
-                            os.unlink(tmp_pptx)
-                            import shutil
-                            if os.path.exists(tmp_png_dir): shutil.rmtree(tmp_png_dir)
-                        except:
-                            pass
 
                     c1, c2 = st.columns(2)
                     with c1:
@@ -2250,15 +2411,11 @@ with tab2:
                             mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                             use_container_width=True)
                     with c2:
-                        if png_bytes:
-                            st.download_button("\U0001f5bc\ufe0f Download PNG", png_bytes,
-                                file_name=f"LobbyOps_Summary_{t3_week.replace(' ','_')}.png",
-                                mime="image/png", use_container_width=True)
-                        else:
-                            st.info("PNG export not available on this server. Download PPTX and export from PowerPoint.")
+                        st.download_button("\U0001f5bc\ufe0f Download PNG", png_bytes,
+                            file_name=f"LobbyOps_Summary_{t3_week.replace(' ','_')}.png",
+                            mime="image/png", use_container_width=True)
 
-                    if png_bytes:
-                        st.image(png_bytes, caption="Preview", use_container_width=True)
+                    st.image(png_bytes, caption="Preview", use_container_width=True)
 
                 except Exception as e:
                     st.error(f"Error: {e}")
