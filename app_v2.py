@@ -1818,13 +1818,19 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
 
     # Try to load Mulish font, fallback to default
     try:
-        font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        font_sm = ImageFont.truetype(font_path, 14)
-        font_md = ImageFont.truetype(font_path, 18)
-        font_lg = ImageFont.truetype(font_path, 24)
-        font_xl = ImageFont.truetype(font_path, 36)
-        font_title = ImageFont.truetype(font_path, 22)
-        font_tiny = ImageFont.truetype(font_path, 12)
+        font_dir = os.path.dirname(os.path.abspath(__file__))
+        mulish_reg = os.path.join(font_dir, "Mulish-Regular.ttf")
+        mulish_bold = os.path.join(font_dir, "Mulish-Bold.ttf")
+        if not os.path.exists(mulish_reg):
+            mulish_reg = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            mulish_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        font_sm = ImageFont.truetype(mulish_reg, 15)
+        font_md = ImageFont.truetype(mulish_bold, 18)
+        font_lg = ImageFont.truetype(mulish_bold, 28)
+        font_xl = ImageFont.truetype(mulish_bold, 40)
+        font_title = ImageFont.truetype(mulish_bold, 22)
+        font_tiny = ImageFont.truetype(mulish_reg, 13)
+        font_section = ImageFont.truetype(mulish_bold, 15)
     except:
         font_sm = ImageFont.load_default()
         font_md = font_sm
@@ -1832,6 +1838,7 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
         font_xl = font_sm
         font_title = font_sm
         font_tiny = font_sm
+        font_section = font_sm
 
     # Build data
     _MG = [
@@ -1903,7 +1910,7 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
     y += 85
 
     # Games Released section
-    draw.text((MARGIN, y), "GAMES RELEASED BY MARKET", fill=PURPLE_C, font=font_sm)
+    draw.text((MARGIN, y), "GAMES RELEASED BY MARKET", fill=PURPLE_C, font=font_section)
     y += 18
     draw.rectangle([MARGIN, y, MARGIN + 200, y + 3], fill=PURPLE_C)
     y += 12
@@ -1926,8 +1933,8 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
     right_w = CW - left_w - 20
 
     # Opt header
-    draw.text((MARGIN, y), "OPTIMIZATIONS BY MARKET", fill=PURPLE_C, font=font_sm)
-    draw.text((MARGIN + left_w + 20, y), "NEW CONTAINERS ENABLED", fill=PURPLE_C, font=font_sm)
+    draw.text((MARGIN, y), "OPTIMIZATIONS BY MARKET", fill=PURPLE_C, font=font_section)
+    draw.text((MARGIN + left_w + 20, y), "NEW CONTAINERS ENABLED", fill=PURPLE_C, font=font_section)
     y += 18
     draw.rectangle([MARGIN, y, MARGIN + 180, y + 3], fill=PURPLE_C)
     draw.rectangle([MARGIN + left_w + 20, y, MARGIN + left_w + 200, y + 3], fill=PURPLE_C)
@@ -1971,7 +1978,7 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
     y += max_rows * row_h + 15
 
     # Key Updates
-    draw.text((MARGIN, y), "KEY UPDATES", fill=PURPLE_C, font=font_sm)
+    draw.text((MARGIN, y), "KEY UPDATES", fill=PURPLE_C, font=font_section)
     y += 18
     draw.rectangle([MARGIN, y, MARGIN + 180, y + 3], fill=PURPLE_C)
     y += 10
