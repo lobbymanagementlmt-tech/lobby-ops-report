@@ -1928,9 +1928,9 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
         draw.text((cx + card_w//2, cy + 38), lbl, fill=DARK_C, font=font_tiny, anchor="mt")
     y += rows_needed * (card_h + 8) + 15
 
-    # Optimizations table (left) + Containers table (right)
-    left_w = (CW - 20) // 2
-    right_w = CW - left_w - 20
+    # Optimizations table (left - narrow) + Containers table (right - wider)
+    left_w = int(CW * 0.33)  # 33% for opt table
+    right_w = CW - left_w - 20  # 67% for containers
 
     # Opt header
     draw.text((MARGIN, y), "OPTIMIZATIONS BY MARKET", fill=PURPLE_C, font=font_section)
@@ -1942,9 +1942,16 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
 
     # Table headers
     draw.text((MARGIN + 5, y), "Market", fill=DARK_C, font=font_sm)
-    draw.text((MARGIN + left_w - 40, y), "Count", fill=DARK_C, font=font_sm)
-    draw.text((MARGIN + left_w + 25, y), "Container", fill=DARK_C, font=font_sm)
-    draw.text((MARGIN + left_w + 20 + right_w - 60, y), "Brand", fill=DARK_C, font=font_sm)
+    draw.text((MARGIN + left_w - 45, y), "Count", fill=DARK_C, font=font_sm)
+    # Container column widths: auto-adjust based on content
+    max_cn_len = max((len(cn) for cn, _ in cont_list), default=20) if cont_list else 20
+    max_cb_len = max((len(cb) for _, cb in cont_list), default=10) if cont_list else 10
+    cn_ratio = max_cn_len / (max_cn_len + max_cb_len)
+    cn_col_w = int(right_w * min(cn_ratio, 0.75))  # container name gets up to 75%
+    cb_col_w = right_w - cn_col_w
+    rx = MARGIN + left_w + 20
+    draw.text((rx + 5, y), "Container", fill=DARK_C, font=font_sm)
+    draw.text((rx + cn_col_w + 5, y), "Brand", fill=DARK_C, font=font_sm)
     y += 20
 
     # Data rows
@@ -1959,21 +1966,21 @@ def _gen_summary_png(game_counts, opt_counts, cont_list, key_updates, week_label
             is_total = mk == "TOTAL"
             bg = TOTAL_BG_C if is_total else (ROW1_C if i % 2 == 0 else ROW2_C)
             draw.rectangle([MARGIN, ry, MARGIN + left_w, ry + row_h], fill=bg)
-            f = font_sm if not is_total else font_md
-            draw.text((MARGIN + 5, ry + 2), mk, fill=DARK_C, font=font_tiny)
-            draw.text((MARGIN + left_w - 40, ry + 2), str(cn), fill=DARK_C, font=font_tiny)
+            draw.text((MARGIN + 5, ry + 3), mk, fill=DARK_C, font=font_tiny)
+            draw.text((MARGIN + left_w - 45, ry + 3), str(cn), fill=DARK_C, font=font_tiny)
 
         # Container row
         if i < len(cont_list):
             cn_name, cn_brand = cont_list[i]
             bg = ROW1_C if i % 2 == 0 else ROW2_C
-            rx = MARGIN + left_w + 20
             draw.rectangle([rx, ry, rx + right_w, ry + row_h], fill=bg)
-            # Truncate if needed
-            cn_disp = cn_name if len(cn_name) <= 30 else cn_name[:27] + "..."
-            cb_disp = cn_brand if len(cn_brand) <= 15 else cn_brand[:12] + "..."
-            draw.text((rx + 5, ry + 2), cn_disp, fill=DARK_C, font=font_tiny)
-            draw.text((rx + right_w - 80, ry + 2), cb_disp, fill=DARK_C, font=font_tiny)
+            # Auto-fit: calculate max chars based on column pixel width (~7px per char at font_tiny)
+            max_cn_chars = cn_col_w // 7
+            max_cb_chars = cb_col_w // 7
+            cn_disp = cn_name if len(cn_name) <= max_cn_chars else cn_name[:max_cn_chars - 3] + "..."
+            cb_disp = cn_brand if len(cn_brand) <= max_cb_chars else cn_brand[:max_cb_chars - 3] + "..."
+            draw.text((rx + 5, ry + 3), cn_disp, fill=DARK_C, font=font_tiny)
+            draw.text((rx + cn_col_w + 5, ry + 3), cb_disp, fill=DARK_C, font=font_tiny)
 
     y += max_rows * row_h + 15
 
